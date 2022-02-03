@@ -37,7 +37,7 @@ client.on("message", async (message) => {
 	} else if (message.content.startsWith(`${prefix}stop`)) {
 		stop(message);
 		return;
-	} else if (message.content.startsWith(`${prefix}queue`)) {
+	} else if (message.content.startsWith(`${prefix}queue`) || message.content.trim() == `${prefix}q`) {
 		listqueue(message);
 		return;
 	} else if (message.content.startsWith(`${prefix}lirik`)) {
@@ -46,12 +46,18 @@ client.on("message", async (message) => {
 	} else if (message.content.startsWith(`${prefix}loop`)) {
         setloop(message);
         return;
+    } else if (message.content.startsWith(`${prefix}shuffle`)) {
+        setShuffle(message);
+        return;
+    } else if (message.content.startsWith(`${prefix}karaoke`)) {
+        setKaraoke(message);
+        return;
     } else {
-		message.channel.send("Commandnya salah bebb!");
+		message.channel.send(messageBuilder("Commandnya salah bebb!"));
 	}
 });
 
-function validURL(str) {
+const validURL = (str) => {
 	var pattern = new RegExp(
 		"^(https?:\\/\\/)?" + // protocol
 			"((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
@@ -99,7 +105,10 @@ const addSongsToPlaylist = async (message, youtubeURLS) => {
 				playing: false,
 				first: true,
 				loop: false,
-				connected: false
+				connected: false,
+				currentIndex: 0,
+				shuffle: false,
+				karaoke: true
 			};
 	
 			queue.set(message.guild.id, queueConstruct);
@@ -171,6 +180,7 @@ const execute = async (message) => {
 					await addSongsToPlaylist(message, [youtubeURL]);
 				});
 			}).catch((error) => {
+				console.log(error);
 				message.channel.send(messageBuilder(`invalid spotify playlistID kak! >,<~`));
 			})
 		}else if(arguments.includes("https://www.youtube.com/")){ // Normal Youtube URL
@@ -219,6 +229,10 @@ const stop = (message) => {
 	serverQueue.connection.dispatcher.end();
 }
 
+const randomInteger = (min, max) => {
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 const play = async (guild, song) => {
 	const serverQueue = queue.get(guild.id);
     if (!song) {
@@ -233,27 +247,73 @@ const play = async (guild, song) => {
 	const dispatcher = serverQueue.connection
 		.play(ytdl(song.url, { filter: "audioonly" }))
 		.on("finish", () => {
-			serverQueue.songs.shift();
-			play(guild, serverQueue.songs[0]);
+            if(!serverQueue.loop){
+				serverQueue.songs.splice(serverQueue.currentIndex, 1);
+                // serverQueue.songs.shift();
+            }else{
+				serverQueue.currentIndex++;
+			}
+
+			if(serverQueue.shuffle){
+				serverQueue.currentIndex = randomInteger(0, serverQueue.songs.length-1);
+			}
+
+			if(serverQueue.currentIndex >= serverQueue.songs.length){
+				serverQueue.currentIndex = 0;
+			}
+			play(guild, serverQueue.songs[serverQueue.currentIndex]);
 		})
 		.on("error", (error) => console.log("Normal error"));
 	dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
 
 	serverQueue.textChannel.send(messageBuilder(`:arrow_forward: **Now Playing** : [${song.title}](${song.url}) [ ${song.duration} ]`));
+	if(serverQueue.karaoke){
+		let lirik = await requestLirik(song.title);
+		serverQueue.textChannel.send(messageBuilder(lirik));
+	}
 }
 
 const setloop = (message) => {
 	serverQueue = queue.get(message.guild.id);
     if (!message.member.voice.channel)
-        return message.channel.send(
-            "Kamu harus ada di voice channel untuk bisa stop musiknya!"
-        );
+        return message.channel.send(messageBuilder(
+            "Kamu harus ada di voice channel untuk bisa jalanin commandnya!"
+		));
     
     if (!serverQueue)
-        return message.channel.send("serverQueue kosong kk!");
+		return message.channel.send(messageBuilder("serverQueue kosong kk!"));
+
     
     serverQueue.loop = !serverQueue.loop;
-    serverQueue.textChannel.send(`Okee kakaa >,< | loop : **${serverQueue.loop}**`);
+    serverQueue.textChannel.send(messageBuilder(`Okee kakaa >,< | loop : **${serverQueue.loop}**`));
+}
+
+const setShuffle = (message) => {
+	serverQueue = queue.get(message.guild.id);
+    if (!message.member.voice.channel)
+		return message.channel.send(messageBuilder(
+			"Kamu harus ada di voice channel untuk bisa jalanin commandnya!"
+		));
+    
+    if (!serverQueue)
+        return message.channel.send(messageBuilder("serverQueue kosong kk!"));
+    
+    serverQueue.shuffle = !serverQueue.shuffle;
+    serverQueue.textChannel.send(messageBuilder(`Okee kakaa >,< | shuffle : **${serverQueue.shuffle}**`));
+}
+
+const setKaraoke = (message) => {
+	serverQueue = queue.get(message.guild.id);
+    if (!message.member.voice.channel)
+		return message.channel.send(messageBuilder(
+			"Kamu harus ada di voice channel untuk bisa jalanin commandnya!"
+		));
+    
+    if (!serverQueue)
+        return message.channel.send(messageBuilder("serverQueue kosong kk!"));
+    
+    serverQueue.karaoke = !serverQueue.karaoke;
+    serverQueue.textChannel.send(messageBuilder(`Okee kakaa >,< | karaoke : **${serverQueue.karaoke}**`));
 }
 
 const listqueue = (message) => {
@@ -270,7 +330,26 @@ const listqueue = (message) => {
 	return message.channel.send(messageBuilder(rtr_message));
 }
 
-const lirik = (message) => {
+const requestLirik = async (title) => {
+	let out_lirik = `Lirik Lagu : **${title}**\n\n`;
+
+	await axios.get("https://anisa-chan.nyakit.in/kapanlagi.php?title=" + encodeURIComponent(title))
+	.then((res) => {
+		let resp = res.data;
+		if (!resp.error) {
+			resp.lyrics.forEach((element) => {
+				out_lirik += element + "\n";
+			});
+		} else {
+			out_lirik += "Lirik tidak ditemukan, coba manual!";
+		}
+	}).catch((error) => {
+
+	});
+	return out_lirik;
+}
+
+const lirik = async (message) => {
 	serverQueue = queue.get(message.guild.id);
 	title = message.content.split("anisa lirik")[1];
 	title = title.trim();
@@ -281,23 +360,8 @@ const lirik = (message) => {
 		title = serverQueue.songs[0].title;
 	}
 
-	let out_lirik = `Lirik Lagu : **${title}**\n\n`;
-	request(
-		"https://anisa-chan.nyakit.in/kapanlagi.php?title=" +
-			encodeURIComponent(title),
-		{},
-		(err, res, body) => {
-			let resp = JSON.parse(body);
-			if (!resp.error) {
-				resp.lyrics.forEach((element) => {
-					out_lirik += element + "\n";
-				});
-			} else {
-				out_lirik += "Lirik tidak ditemukan, coba manual!";
-			}
-			return message.channel.send(messageBuilder(out_lirik));
-		}
-	);
+	let lirik = await requestLirik(title);
+	return message.channel.send(messageBuilder(lirik));
 }
 
 client.login(token);
