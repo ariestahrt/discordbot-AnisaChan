@@ -1,10 +1,13 @@
 const Discord = require("discord.js");
-const { prefix, token, spotify_token } = require("./config.json");
+const { prefix, token, spotify_token_env, app_client_id, app_client_secret } = require("./config.json");
 const ytdl = require("ytdl-core");
 const yts = require("yt-search");
 const request = require("request");
 const { default: axios } = require("axios");
 const ytpl = require('ytpl');
+const fs = require('fs')
+
+let spotify_token = spotify_token_env
 
 // GLOBAL serverQueue
 let serverQueue = null;
@@ -51,6 +54,29 @@ client.on("message", async (message) => {
         return;
     } else if (message.content.startsWith(`${prefix}karaoke`)) {
         setKaraoke(message);
+        return;
+    } else if (message.content.startsWith(`${prefix}spotify`)) {
+		const new_token = message.content.split(`${prefix}spotify`)[1].trim();
+
+		spotify_token = new_token
+        serverQueue = queue.get(message.guild.id);
+		let content = JSON.stringify({
+			"prefix": prefix,
+			"token": token,
+			"spotify_token": spotify_token,
+			"app_client_id": app_client_id,
+			"app_client_secret" : app_client_secret
+		});
+		
+		fs.writeFile('config.json', content, err => {
+			if (err) {
+			  console.error(err)
+			  return;
+			}
+			//file written successfully
+			message.channel.send(messageBuilder("Token berhasil di update"));
+		});
+
         return;
     } else {
 		message.channel.send(messageBuilder("Commandnya salah bebb!"));
