@@ -116,7 +116,8 @@ const addSongsToPlaylist = async (message, youtubeURLS) => {
 			title: songInfo.videoDetails.title,
 			url: songInfo.videoDetails.video_url,
 			formats: songInfo.formats,
-			duration: duration
+			duration: duration,
+			duration_ms: songInfo.videoDetails.lengthSeconds * 1000
 		};
 
 		const voiceChannel = message.member.voice.channel;
@@ -156,7 +157,7 @@ const addSongsToPlaylist = async (message, youtubeURLS) => {
 }
 
 const execute = async (message) => {
-	const arguments = message.content.split("anisa play ")[1].trim();
+	const arguments = message.content.split("anisa play ")[1] == undefined ? message.content.split("anisa p ")[1].trim() : message.content.split("anisa play ")[1].trim();
 
 	const voiceChannel = message.member.voice.channel;
 	if (!voiceChannel){
@@ -292,10 +293,10 @@ const play = async (guild, song) => {
 		.on("error", (error) => console.log("Normal error"));
 	dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
 
-	serverQueue.textChannel.send(messageBuilder(`:arrow_forward: **Now Playing** : [${song.title}](${song.url}) [ ${song.duration} ]`));
+	serverQueue.textChannel.send(messageBuilder(`:arrow_forward: **Now Playing** : [${song.title}](${song.url}) [ ${song.duration} ]`)).then(msg => msg.delete({timeout:song.duration_ms}));
 	if(serverQueue.karaoke){
 		let lirik = await requestLirik(song.title);
-		serverQueue.textChannel.send(messageBuilder(lirik));
+		serverQueue.textChannel.send(messageBuilder(lirik)).then(msg => msg.delete({timeout:song.duration_ms}));
 	}
 }
 
