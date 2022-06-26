@@ -31,7 +31,7 @@ client.on("message", async (message) => {
 	if (message.author.bot) return;
 	if (!message.content.startsWith(prefix)) return;
 
-	if (message.content.startsWith(`${prefix}play `)) {
+	if (message.content.startsWith(`${prefix}play `) || message.content.startsWith(`${prefix}p `)) {
 		execute(message);
 		return;
 	} else if (message.content.startsWith(`${prefix}skip`)) {
